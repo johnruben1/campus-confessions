@@ -23,6 +23,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         text TEXT NOT NULL,
         mood TEXT DEFAULT 'none',
+        image TEXT,
         likes INTEGER DEFAULT 0,
         reposts INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -91,16 +92,40 @@ app.get('/api/posts', (req, res) => {
 
 // Create post
 app.post('/api/posts', (req, res) => {
-    const { text, mood } = req.body;
-    if (!text || !text.trim()) return res.status(400).json({ error: 'Post cannot be empty' });
-    if (text.trim().length > MAX_LENGTH) return res.status(400).json({ error: `Max ${MAX_LENGTH} characters` });
+    const { text, mood, image } = req.body;
+    
+    console.log('Received post data:', { text, mood, image: image ? 'present' : 'missing', imageLength: image ? image.length : 0 });
+    
+    // Allow posts with text, image, or both
+    if ((!text || !text.trim()) && !image) {
+        return res.status(400).json({ error: 'Post must have text or image' });
+    }
+    
+    if (text && text.trim().length > MAX_LENGTH) {
+        return res.status(400).json({ error: `Max ${MAX_LENGTH} characters` });
+    }
 
     const validMoods = ['none', 'love', 'happy', 'sad', 'angry', 'anxious', 'excited'];
     const safeMood = validMoods.includes(mood) ? mood : 'none';
 
-    db.run(`INSERT INTO posts (text, mood) VALUES (?, ?)`, [text.trim(), safeMood], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ id: this.lastID, text: text.trim(), mood: safeMood, likes: 0, reposts: 0, reactions: {}, reply_count: 0 });
+    const safeText = text ? text.trim() : '';
+    
+    db.run(`INSERT INTO posts (text, mood, image) VALUES (?, ?, ?)`, [safeText, safeMood, image || null], function(err) {
+        if (err) {
+            console.error('Database error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        console.log('Post created successfully with ID:', this.lastID);
+        res.json({ 
+            id: this.lastID, 
+            text: safeText, 
+            mood: safeMood, 
+            image: image || null,
+            likes: 0, 
+            reposts: 0, 
+            reactions: {}, 
+            reply_count: 0 
+        });
     });
 });
 
